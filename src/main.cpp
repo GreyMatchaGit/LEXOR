@@ -27,6 +27,7 @@ int main(int argc, char** argv) {
 
             Evaluator evaluator;
             evaluator.evaluate(ast.get());
+            std::cout << std::endl;
         } catch (const std::exception& e) {
             std::cerr << "Runtime Error: " << e.what() << std::endl;
         }
