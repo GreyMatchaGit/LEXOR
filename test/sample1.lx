@@ -1,0 +1,6 @@
+SCRIPT AREA
+START SCRIPT
+DECLARE INT xyz, abc=100
+xyz= ((abc *5)/10 + 10) * -1
+PRINT: [[] & xyz & []]
+END SCRIPT
