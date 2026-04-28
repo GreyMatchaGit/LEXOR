@@ -115,8 +115,15 @@ std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& to
 
     while (!isAtEnd()) {
         if (check(TokenType::END_OF_FILE)) break;
-        if (check(TokenType::END) && lines[currentLine].size() > 1 && lines[currentLine][1].type == TokenType::SCRIPT) {
-            break; // Valid exit
+        
+        // check for END SCRIPT transparently
+        Token firstT = peek();
+        if (firstT.type == TokenType::END) {
+            int tempTk = currentToken + 1;
+            while(tempTk < lines[currentLine].size() && (lines[currentLine][tempTk].type == TokenType::INDENT || lines[currentLine][tempTk].type == TokenType::DEDENT)) tempTk++;
+            if (tempTk < lines[currentLine].size() && lines[currentLine][tempTk].type == TokenType::SCRIPT) {
+                break; // Valid exit
+            }
         }
 
         if (lines[currentLine].empty()) {
