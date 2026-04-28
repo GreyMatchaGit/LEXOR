@@ -1,16 +1,16 @@
 SCRIPT AREA
-START SCRIPT
-DECLARE INT i=0
-DECLARE BOOL condition="TRUE"
+	START SCRIPT
+	DECLARE INT i=0
+	DECLARE BOOL condition="TRUE"
 
-REPEAT WHEN (condition)
-START REPEAT
-	i = i + 1
-	IF (i == 3)
-	START IF
-		condition = "FALSE"
-	END IF
-END REPEAT
+	REPEAT WHEN (condition)
+	START REPEAT
+		i = i + 1
+		IF (i == 3)
+		START IF
+			condition = "FALSE"
+		END IF
+	END REPEAT
 
-PRINT: i
-END SCRIPT
+	PRINT: i
+	END SCRIPT

@@ -83,12 +83,32 @@ std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& to
         
         bool foundStart = false;
         while (!isAtEnd()) {
-            if (check(TokenType::START) && lines[currentLine].size() > 1 && lines[currentLine][1].type == TokenType::SCRIPT) {
+            bool ws = true;
+            for (const auto& t : lines[currentLine]) {
+                if (t.type != TokenType::INDENT && t.type != TokenType::DEDENT) ws = false;
+            }
+            if (lines[currentLine].empty() || ws) {
+                advanceLine();
+                continue;
+            }
+            
+            if (lines[currentLine][0].type != TokenType::INDENT) {
+                throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: Must have indent after SCRIPT AREA");
+            }
+            
+            // Check for START SCRIPT skipping the INDENT
+            int tIndex = 1;
+            while(tIndex < lines[currentLine].size() && (lines[currentLine][tIndex].type == TokenType::INDENT || lines[currentLine][tIndex].type == TokenType::DEDENT)) {
+                tIndex++;
+            }
+            
+            if (tIndex + 1 < lines[currentLine].size() && lines[currentLine][tIndex].type == TokenType::START && lines[currentLine][tIndex+1].type == TokenType::SCRIPT) {
                 foundStart = true;
                 advanceLine();
                 break;
+            } else {
+                 throw std::runtime_error("Expected START SCRIPT after SCRIPT AREA");
             }
-            advanceLine();
         }
         if (!foundStart) throw std::runtime_error("Missing START SCRIPT");
     }
