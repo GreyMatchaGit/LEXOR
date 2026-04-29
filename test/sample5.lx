@@ -1,0 +1,15 @@
+%% this is a comment
+SCRIPT AREA %% this is a comment
+%% this is a comment
+START SCRIPT %% this is a comment
+    DECLARE INT x, y, z=5 %% this is a comment
+    DECLARE CHAR a_1='n'
+    DECLARE BOOL t="TRUE"
+    x=y=4
+    a_1='c'
+    %% this is a comment
+    %% this is a comment
+    PRINT: x & t & z & $ & a_1 & [#] & "last"
+%% this is a comment
+END SCRIPT %% this is a comment
+%% this is a comment

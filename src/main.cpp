@@ -31,28 +31,44 @@ int main(int argc, char** argv) {
             std::cerr << "Runtime Error: " << e.what() << std::endl;
         }
     } else {
-        std::cout << "LEXOR interactive REPL. Type your statements." << std::endl;
-        Lexer lexer;
-        Parser parser(true);
-        Evaluator evaluator;
-
+        std::cout << "LEXOR interactive REPL. Type your script. Type 'END SCRIPT' to execute, or 'exit' to quit." << std::endl;
+        
+        std::string source = "";
         std::string line;
         while (true) {
             std::cout << ">> ";
             if (!std::getline(std::cin, line)) break;
             if (line == "exit" || line == "quit") break;
             
-            try {
-                auto tokens = lexer.lex(line);
-                if (tokens.size() > 0 && !tokens.front().empty() && tokens.front().front().type != TokenType::END_OF_FILE) {
-                     auto stmt = parser.parseSingleLine(tokens.front());
-                     // Wrap inside a temp Program to evaluate
-                     Program p;
-                     p.statements.push_back(std::move(stmt));
-                     evaluator.evaluate(&p);
+            source += line + "\n";
+            
+            // Trim whitespace to check for END SCRIPT
+            std::string trimmed = line;
+            size_t startpos = trimmed.find_first_not_of(" \t\r\n");
+            if (startpos != std::string::npos) {
+                trimmed = trimmed.substr(startpos);
+            } else {
+                trimmed = "";
+            }
+            
+            size_t endpos = trimmed.find_last_not_of(" \t\r\n");
+            if (endpos != std::string::npos) {
+                trimmed = trimmed.substr(0, endpos + 1);
+            }
+
+            if (trimmed == "END SCRIPT") {
+                try {
+                    Lexer lexer;
+                    auto tokens = lexer.lex(source);
+                    Parser parser(false); // Evaluate full script mode
+                    auto ast = parser.parse(tokens);
+                    Evaluator evaluator;
+                    evaluator.evaluate(ast.get());
+                    std::cout << std::endl; // newline to prevent output concatenation
+                } catch (const std::exception& e) {
+                    std::cerr << "Error: " << e.what() << std::endl;
                 }
-            } catch (const std::exception& e) {
-                std::cerr << "Error: " << e.what() << std::endl;
+                source = ""; // Reset for next script
             }
         }
     }

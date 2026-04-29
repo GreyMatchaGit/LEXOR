@@ -1,0 +1,6 @@
+SCRIPT AREA
+START SCRIPT
+    DECLARE FLOAT x, y = 3.14
+    PRINT: x & " YAWA " & $ & y
+END SCRIPT
+%% HELLO
