@@ -66,81 +66,64 @@ std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& to
     currentLine = 0;
     currentToken = 0;
     
+    lineIndents.assign(lines.size(), 0);
+    int currIndent = 0;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        for (const auto& t : lines[i]) {
+            if (t.type == TokenType::INDENT) currIndent++;
+            else if (t.type == TokenType::DEDENT) currIndent--;
+            else break;
+        }
+        lineIndents[i] = currIndent;
+    }
+    
     auto program = std::make_unique<Program>();
 
     if (!replMode) {
-        // Enforce script boundaries
-        bool foundArea = false;
-        while (!isAtEnd()) {
-            if (check(TokenType::SCRIPT) && lines[currentLine].size() > 1 && lines[currentLine][1].type == TokenType::AREA) {
-                foundArea = true;
-                advanceLine();
-                break;
-            }
-            advanceLine();
+        // First line must be SCRIPT AREA
+        if (isAtEnd() || !check(TokenType::SCRIPT) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::AREA) {
+            int lineNum = isAtEnd() ? 1 : lines[currentLine][0].line;
+            throw std::runtime_error("Line " + std::to_string(lineNum) + " Parser Error: Missing SCRIPT AREA at the beginning");
         }
-        if (!foundArea) throw std::runtime_error("Missing SCRIPT AREA");
-        
-        bool foundStart = false;
-        while (!isAtEnd()) {
-            bool ws = true;
-            for (const auto& t : lines[currentLine]) {
-                if (t.type != TokenType::INDENT && t.type != TokenType::DEDENT) ws = false;
-            }
-            if (lines[currentLine].empty() || ws) {
-                advanceLine();
-                continue;
-            }
-            
-            if (lines[currentLine][0].type != TokenType::INDENT) {
-                throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: Must have indent after SCRIPT AREA");
-            }
-            
-            // Check for START SCRIPT skipping the INDENT
-            int tIndex = 1;
-            while(tIndex < lines[currentLine].size() && (lines[currentLine][tIndex].type == TokenType::INDENT || lines[currentLine][tIndex].type == TokenType::DEDENT)) {
-                tIndex++;
-            }
-            
-            if (tIndex + 1 < lines[currentLine].size() && lines[currentLine][tIndex].type == TokenType::START && lines[currentLine][tIndex+1].type == TokenType::SCRIPT) {
-                foundStart = true;
-                advanceLine();
-                break;
-            } else {
-                 throw std::runtime_error("Expected START SCRIPT after SCRIPT AREA");
-            }
+        if (lineIndents[currentLine] != 0) {
+            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: SCRIPT AREA must not be indented");
         }
-        if (!foundStart) throw std::runtime_error("Missing START SCRIPT");
+        advanceLine();
+
+        if (isAtEnd()) throw std::runtime_error("Missing START SCRIPT");
+
+        // Check for empty lines right after SCRIPT AREA
+        if (!lines[currentLine].empty() && lines[currentLine][0].type == TokenType::ERROR) {
+            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: " + lines[currentLine][0].value);
+        }
+
+        // START SCRIPT must not be indented
+        if (lineIndents[currentLine] != 0) {
+            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: START SCRIPT must not be indented");
+        }
+
+        if (isAtEnd() || !check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::SCRIPT) {
+            int lineNum = isAtEnd() ? 2 : lines[currentLine][0].line;
+            throw std::runtime_error("Line " + std::to_string(lineNum) + " Parser Error: Expected START SCRIPT immediately after SCRIPT AREA");
+        }
+        advanceLine();
     }
 
     while (!isAtEnd()) {
         if (check(TokenType::END_OF_FILE)) break;
-        
-        // check for END SCRIPT transparently
-        Token firstT = peek();
-        if (firstT.type == TokenType::END) {
-            int tempTk = currentToken + 1;
-            while(tempTk < lines[currentLine].size() && (lines[currentLine][tempTk].type == TokenType::INDENT || lines[currentLine][tempTk].type == TokenType::DEDENT)) tempTk++;
-            if (tempTk < lines[currentLine].size() && lines[currentLine][tempTk].type == TokenType::SCRIPT) {
-                break; // Valid exit
+        if (check(TokenType::END) && currentToken + 1 < lines[currentLine].size() && lines[currentLine][currentToken + 1].type == TokenType::SCRIPT) {
+            if (!replMode && lineIndents[currentLine] != 0) {
+                throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: END SCRIPT must not be indented");
             }
+            break; // Valid exit
         }
 
-        if (lines[currentLine].empty()) {
-            advanceLine();
-            continue;
+        if (!lines[currentLine].empty() && lines[currentLine][0].type == TokenType::ERROR) {
+            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: " + lines[currentLine][0].value);
         }
-        
-        // Skip purely indent/dedent lines if they somehow slip in at top level without context
-        bool onlyWhitespace = true;
-        for (const auto& t : lines[currentLine]) {
-            if (t.type != TokenType::INDENT && t.type != TokenType::DEDENT) {
-                onlyWhitespace = false;
-                break;
-            }
-        }
-        if (onlyWhitespace) {
-            advanceLine(); continue;
+
+        if (!replMode && lineIndents[currentLine] == 0) {
+            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: Code body must be indented");
         }
 
         program->statements.push_back(declaration());
@@ -154,6 +137,7 @@ std::unique_ptr<Statement> Parser::parseSingleLine(const std::vector<Token>& tok
     lines = {tokenLine};
     currentLine = 0;
     currentToken = 0;
+    lineIndents = {0};
     return declaration();
 }
 
@@ -244,7 +228,7 @@ std::unique_ptr<Statement> Parser::ifStmt() {
     consume(TokenType::RPAREN, "Expected ')' after IF condition.");
 
     advanceLine(); // move to START IF line
-    if (!check(TokenType::START) || lines[currentLine].size() < 2 || lines[currentLine][1].type != TokenType::IF) {
+    if (!check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::IF) {
         throw std::runtime_error("Expected START IF");
     }
     
@@ -265,8 +249,15 @@ std::unique_ptr<Statement> Parser::ifStmt() {
             else break;
         }
 
-        if (nextL < lines.size() && lines[nextL][0].type == TokenType::ELSE) {
-            currentLine = nextL; currentToken = 0; // Move from END IF to ELSE line
+        int tIndex = 0;
+        if (nextL < lines.size()) {
+            while (tIndex < lines[nextL].size() && (lines[nextL][tIndex].type == TokenType::INDENT || lines[nextL][tIndex].type == TokenType::DEDENT)) {
+                tIndex++;
+            }
+        }
+
+        if (nextL < lines.size() && tIndex < lines[nextL].size() && lines[nextL][tIndex].type == TokenType::ELSE) {
+            currentLine = nextL; currentToken = tIndex; // Move from END IF to ELSE line
             
             advance(); // Consume ELSE
             if (match(TokenType::IF)) {
@@ -274,7 +265,7 @@ std::unique_ptr<Statement> Parser::ifStmt() {
                 auto elifCondition = expression();
                 consume(TokenType::RPAREN, "Expected ')' after condition.");
                 advanceLine();
-                if (!check(TokenType::START) || lines[currentLine].size() < 2 || lines[currentLine][1].type != TokenType::IF) {
+                if (!check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::IF) {
                     throw std::runtime_error("Expected START IF for ELSE IF");
                 }
                 auto elifBody = block();
@@ -283,7 +274,7 @@ std::unique_ptr<Statement> Parser::ifStmt() {
             } else {
                 // ELSE
                 advanceLine();
-                if (!check(TokenType::START) || lines[currentLine].size() < 2 || lines[currentLine][1].type != TokenType::IF) {
+                if (!check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::IF) {
                     throw std::runtime_error("Expected START IF for ELSE");
                 }
                 stmt->elseBranch = block();
@@ -311,7 +302,7 @@ std::unique_ptr<Statement> Parser::forStmt() {
     consume(TokenType::RPAREN, "Expected ')'.");
     
     advanceLine();
-    if (!check(TokenType::START) || lines[currentLine].size() < 2 || lines[currentLine][1].type != TokenType::FOR) {
+    if (!check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::FOR) {
         throw std::runtime_error("Expected START FOR");
     }
     
@@ -332,7 +323,7 @@ std::unique_ptr<Statement> Parser::repeatStmt() {
     consume(TokenType::RPAREN, "Expected ')'.");
     
     advanceLine();
-    if (!check(TokenType::START) || lines[currentLine].size() < 2 || lines[currentLine][1].type != TokenType::REPEAT) {
+    if (!check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::REPEAT) {
         throw std::runtime_error("Expected START REPEAT");
     }
     
@@ -345,14 +336,17 @@ std::vector<std::unique_ptr<Statement>> Parser::block() {
     advanceLine(); // move past START block keyword line
     
     while (!isAtEnd()) {
-        if (lines[currentLine].empty() || check(TokenType::INDENT) || check(TokenType::DEDENT)) {
-            advanceLine();
-            continue;
+        if (!lines[currentLine].empty() && lines[currentLine][0].type == TokenType::ERROR) {
+            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: " + lines[currentLine][0].value);
         }
         
         if (check(TokenType::END)) {
             // Found END block
             break;
+        }
+
+        if (!replMode && lineIndents[currentLine] == 0) {
+            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: Code body must be indented");
         }
 
         statements.push_back(declaration());

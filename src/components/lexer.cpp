@@ -41,16 +41,22 @@ std::vector<std::vector<Token>> Lexer::lex(const std::string& source) {
             advance();
         }
         
-        // Skip empty lines or comment-only lines
+        // Reject empty lines
         if (peek() == '\n' || peek() == '\r') {
             if (peek() == '\r' && peek(1) == '\n') advance();
             advance();
+            tokensByLine.push_back({{TokenType::ERROR, "Empty lines are not allowed.", line}});
             line++;
             continue;
         }
 
         if (peek() == '%' && peek(1) == '%') {
-            while (!isAtEnd() && peek() != '\n') advance();
+            while (!isAtEnd() && peek() != '\n' && peek() != '\r') advance();
+            if (!isAtEnd() && (peek() == '\n' || peek() == '\r')) {
+                if (peek() == '\r' && peek(1) == '\n') advance();
+                advance();
+                line++;
+            }
             continue;
         }
         
