@@ -27,7 +27,7 @@ int main(int argc, char** argv) {
 
             Evaluator evaluator;
             evaluator.evaluate(ast.get());
-            std::cout << std::endl;
+            std::cout << "Program ran successfully." << std::endl;
         } catch (const std::exception& e) {
             std::cerr << "Runtime Error: " << e.what() << std::endl;
         }
@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
                     auto ast = parser.parse(tokens);
                     Evaluator evaluator;
                     evaluator.evaluate(ast.get());
-                    std::cout << std::endl; // newline to prevent output concatenation
+                   std::cout << std::endl << "Program ran successfully." << std::endl; // newline to prevent output concatenation
                 } catch (const std::exception& e) {
                     std::cerr << "Error: " << e.what() << std::endl;
                 }
