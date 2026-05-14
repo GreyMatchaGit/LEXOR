@@ -24,12 +24,12 @@ int main(int argc, char** argv) {
 
             Parser parser(false);
             auto ast = parser.parse(tokens);
-
+            
             Evaluator evaluator;
             evaluator.evaluate(ast.get());
-            std::cout << "Program ran successfully." << std::endl;
+            std::cout << std::endl << std::endl <<"Program ran successfully." << std::endl;
         } catch (const std::exception& e) {
-            std::cerr << "Runtime Error: " << e.what() << std::endl;
+            std::cerr << std::endl << "Runtime Error: " << e.what() << std::endl;
         }
     } else {
         std::cout << "LEXOR interactive REPL. Type your script. Type 'END SCRIPT' to execute, or 'exit' to quit." << std::endl;
@@ -65,9 +65,9 @@ int main(int argc, char** argv) {
                     auto ast = parser.parse(tokens);
                     Evaluator evaluator;
                     evaluator.evaluate(ast.get());
-                   std::cout << std::endl << "Program ran successfully." << std::endl; // newline to prevent output concatenation
+                   std::cout << std::endl << std::endl << "Program ran successfully." << std::endl; // newline to prevent output concatenation
                 } catch (const std::exception& e) {
-                    std::cerr << "Error: " << e.what() << std::endl;
+                    std::cerr << std::endl << "Error: " << e.what() << std::endl;
                 }
                 source = ""; // Reset for next script
             }

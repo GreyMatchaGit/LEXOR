@@ -10,11 +10,10 @@ private:
     std::string input;
     int pos;
     int line;
-    std::vector<int> indentStack;
 
-    char peek(int offset = 0);
-    char advance();
-    bool isAtEnd();
+    char peek(int offset = 0);  // Looks ahead at the next character(s) without consuming them.
+    char advance();             // Consumes the next character and returns it.
+    bool isAtEnd();             // Checks if we've reached the end of the input.
     
 public:
     Lexer();

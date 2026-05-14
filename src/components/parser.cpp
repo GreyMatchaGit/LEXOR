@@ -13,9 +13,6 @@ bool Parser::isLineAtEnd() {
 }
 
 Token Parser::peek() {
-    while (!isLineAtEnd() && (lines[currentLine][currentToken].type == TokenType::INDENT || lines[currentLine][currentToken].type == TokenType::DEDENT)) {
-        currentToken++;
-    }
     if (isLineAtEnd()) {
         if (currentLine + 1 < lines.size()) return lines[currentLine + 1][0]; // fallback
         return {TokenType::END_OF_FILE, "", 0};
@@ -30,12 +27,7 @@ Token Parser::advance() {
 }
 
 Token Parser::previous() {
-    int tempToken = currentToken - 1;
-    while (tempToken >= 0 && (lines[currentLine][tempToken].type == TokenType::INDENT || lines[currentLine][tempToken].type == TokenType::DEDENT)) {
-        tempToken--;
-    }
-    if (tempToken >= 0) return lines[currentLine][tempToken];
-    return lines[currentLine][currentToken - 1]; // fallback
+    return lines[currentLine][currentToken - 1];
 }
 
 bool Parser::check(TokenType type) {
@@ -62,20 +54,18 @@ void Parser::advanceLine() {
 }
 
 std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& tokens) {
+    // Catch any lexer errors before parsing
+    for (const auto& lineTokens : tokens) {
+        for (const auto& t : lineTokens) {
+            if (t.type == TokenType::ERROR) {
+                throw std::runtime_error("Line " + std::to_string(t.line) + " Parser Error: " + t.value);
+            }
+        }
+    }
+
     lines = tokens;
     currentLine = 0;
     currentToken = 0;
-    
-    lineIndents.assign(lines.size(), 0);
-    int currIndent = 0;
-    for (size_t i = 0; i < lines.size(); ++i) {
-        for (const auto& t : lines[i]) {
-            if (t.type == TokenType::INDENT) currIndent++;
-            else if (t.type == TokenType::DEDENT) currIndent--;
-            else break;
-        }
-        lineIndents[i] = currIndent;
-    }
     
     auto program = std::make_unique<Program>();
 
@@ -85,22 +75,9 @@ std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& to
             int lineNum = isAtEnd() ? 1 : lines[currentLine][0].line;
             throw std::runtime_error("Line " + std::to_string(lineNum) + " Parser Error: Missing SCRIPT AREA at the beginning");
         }
-        if (lineIndents[currentLine] != 0) {
-            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: SCRIPT AREA must not be indented");
-        }
         advanceLine();
 
         if (isAtEnd()) throw std::runtime_error("Missing START SCRIPT");
-
-        // Check for empty lines right after SCRIPT AREA
-        if (!lines[currentLine].empty() && lines[currentLine][0].type == TokenType::ERROR) {
-            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: " + lines[currentLine][0].value);
-        }
-
-        // START SCRIPT must not be indented
-        if (lineIndents[currentLine] != 0) {
-            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: START SCRIPT must not be indented");
-        }
 
         if (isAtEnd() || !check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::SCRIPT) {
             int lineNum = isAtEnd() ? 2 : lines[currentLine][0].line;
@@ -112,18 +89,7 @@ std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& to
     while (!isAtEnd()) {
         if (check(TokenType::END_OF_FILE)) break;
         if (check(TokenType::END) && currentToken + 1 < lines[currentLine].size() && lines[currentLine][currentToken + 1].type == TokenType::SCRIPT) {
-            if (!replMode && lineIndents[currentLine] != 0) {
-                throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: END SCRIPT must not be indented");
-            }
             break; // Valid exit
-        }
-
-        if (!lines[currentLine].empty() && lines[currentLine][0].type == TokenType::ERROR) {
-            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: " + lines[currentLine][0].value);
-        }
-
-        if (!replMode && lineIndents[currentLine] == 0) {
-            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: Code body must be indented");
         }
 
         program->statements.push_back(declaration());
@@ -134,10 +100,15 @@ std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& to
 }
 
 std::unique_ptr<Statement> Parser::parseSingleLine(const std::vector<Token>& tokenLine) {
+    for (const auto& t : tokenLine) {
+        if (t.type == TokenType::ERROR) {
+            throw std::runtime_error("Line " + std::to_string(t.line) + " Parser Error: " + t.value);
+        }
+    }
+
     lines = {tokenLine};
     currentLine = 0;
     currentToken = 0;
-    lineIndents = {0};
     return declaration();
 }
 
@@ -239,22 +210,12 @@ std::unique_ptr<Statement> Parser::ifStmt() {
     // Handle ELSE IF / ELSE
     while (currentLine + 1 < lines.size()) {
         int nextL = currentLine + 1;
-        // Skip purely whitespace lines
-        while (nextL < lines.size()) {
-            bool onlyWs = true;
-            for (const auto& t : lines[nextL]) {
-                if (t.type != TokenType::INDENT && t.type != TokenType::DEDENT) { onlyWs = false; break; }
-            }
-            if (onlyWs || lines[nextL].empty()) nextL++;
-            else break;
+        // Skip empty lines (could happen with ERROR tokens but those will be caught if processed)
+        while (nextL < lines.size() && lines[nextL].empty()) {
+            nextL++;
         }
 
         int tIndex = 0;
-        if (nextL < lines.size()) {
-            while (tIndex < lines[nextL].size() && (lines[nextL][tIndex].type == TokenType::INDENT || lines[nextL][tIndex].type == TokenType::DEDENT)) {
-                tIndex++;
-            }
-        }
 
         if (nextL < lines.size() && tIndex < lines[nextL].size() && lines[nextL][tIndex].type == TokenType::ELSE) {
             currentLine = nextL; currentToken = tIndex; // Move from END IF to ELSE line
@@ -336,17 +297,9 @@ std::vector<std::unique_ptr<Statement>> Parser::block() {
     advanceLine(); // move past START block keyword line
     
     while (!isAtEnd()) {
-        if (!lines[currentLine].empty() && lines[currentLine][0].type == TokenType::ERROR) {
-            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: " + lines[currentLine][0].value);
-        }
-        
         if (check(TokenType::END)) {
             // Found END block
             break;
-        }
-
-        if (!replMode && lineIndents[currentLine] == 0) {
-            throw std::runtime_error("Line " + std::to_string(lines[currentLine][0].line) + " Parser Error: Code body must be indented");
         }
 
         statements.push_back(declaration());

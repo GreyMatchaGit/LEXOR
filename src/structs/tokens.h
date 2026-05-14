@@ -28,7 +28,6 @@ enum class TokenType {
     COLON, COMMA, LPAREN, RPAREN,
 
     // Whitespace / Scope
-    INDENT, DEDENT,
 
     // End of File
     END_OF_FILE,

@@ -10,7 +10,6 @@
 class Parser {
 private:
     std::vector<std::vector<Token>> lines;
-    std::vector<int> lineIndents;
     int currentLine;
     int currentToken;
     bool replMode;

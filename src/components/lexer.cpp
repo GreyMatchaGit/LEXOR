@@ -4,7 +4,6 @@
 #include <iostream>
 
 Lexer::Lexer() {
-    indentStack.push_back(0);
 }
 
 char Lexer::peek(int offset) {
@@ -21,6 +20,7 @@ bool Lexer::isAtEnd() {
     return pos >= input.length();
 }
 
+
 std::vector<std::vector<Token>> Lexer::lex(const std::string& source) {
     input = source;
     pos = 0;
@@ -28,28 +28,23 @@ std::vector<std::vector<Token>> Lexer::lex(const std::string& source) {
     
     std::vector<std::vector<Token>> tokensByLine;
     std::vector<Token> currentLineTokens;
-    indentStack.clear();
-    indentStack.push_back(0);
 
     while (!isAtEnd()) {
-        int currentIndent = 0;
-        
-        // Count indentation
+        // Skip leading whitespace
         while (peek() == ' ' || peek() == '\t') {
-            if (peek() == '\t') currentIndent += 4;
-            else currentIndent += 1;
             advance();
         }
         
-        // Reject empty lines
+        // Empty line handling
         if (peek() == '\n' || peek() == '\r') {
             if (peek() == '\r' && peek(1) == '\n') advance();
             advance();
             tokensByLine.push_back({{TokenType::ERROR, "Empty lines are not allowed.", line}});
             line++;
             continue;
-        }
+        }   
 
+        // Comment handling
         if (peek() == '%' && peek(1) == '%') {
             while (!isAtEnd() && peek() != '\n' && peek() != '\r') advance();
             if (!isAtEnd() && (peek() == '\n' || peek() == '\r')) {
@@ -61,31 +56,24 @@ std::vector<std::vector<Token>> Lexer::lex(const std::string& source) {
         }
         
         if (isAtEnd()) break;
-
-        // Process Indentation logic before reading line tokens
-        if (currentIndent > indentStack.back()) {
-            indentStack.push_back(currentIndent);
-            currentLineTokens.push_back({TokenType::INDENT, "INDENT", line});
-        } else if (currentIndent < indentStack.back()) {
-            while (indentStack.size() > 1 && currentIndent < indentStack.back()) {
-                indentStack.pop_back();
-                currentLineTokens.push_back({TokenType::DEDENT, "DEDENT", line});
-            }
-        }
         
         // Read tokens for this line
         while (!isAtEnd() && peek() != '\n' && peek() != '\r') {
             char c = peek();
             
+            // Skip whitespace within the line
             if (c == ' ' || c == '\t') {
-                advance(); continue;
+                advance(); 
+                continue;
             }
-
+            
+            // Handles inline comments
             if (c == '%' && peek(1) == '%') {
                 while (!isAtEnd() && peek() != '\n') advance();
                 break;
             }
-
+            
+            // Identifiers and Keywords
             if (isalpha(c) || c == '_') {
                 std::string ident = "";
                 while (isalnum(peek()) || peek() == '_') {
@@ -95,12 +83,25 @@ std::vector<std::vector<Token>> Lexer::lex(const std::string& source) {
             } else if (isdigit(c)) {
                 std::string num = "";
                 bool isFloat = false;
+                bool isValid = true;
+
+                // 3.14.2
                 while (isdigit(peek()) || peek() == '.') {
-                    if (peek() == '.') isFloat = true;
+                    if (peek() == '.') {
+                        if (isFloat) { // Ensure only one dot for floats
+                            isValid = false;
+                        }
+                        isFloat = true;
+                    }
                     num += advance();
                 }
-                currentLineTokens.push_back({isFloat ? TokenType::FLOAT_LITERAL : TokenType::INT_LITERAL, num, line});
-            } else if (c == '"') {
+
+                if (!isValid || num == "." || num.front() == '.' || num.back() == '.') {
+                    currentLineTokens.push_back({TokenType::ERROR, "Invalid number format: " + num, line});
+                } else {
+                    currentLineTokens.push_back({isFloat ? TokenType::FLOAT_LITERAL : TokenType::INT_LITERAL, num, line});
+                }
+            } else if (c == '"') { 
                 advance(); // skip "
                 std::string str = "";
                 while (!isAtEnd() && peek() != '"') {
@@ -185,14 +186,6 @@ std::vector<std::vector<Token>> Lexer::lex(const std::string& source) {
             line++;
         }
     }
-    
-    // dedent all remaining
-    currentLineTokens.clear();
-    while (indentStack.size() > 1) {
-        indentStack.pop_back();
-        currentLineTokens.push_back({TokenType::DEDENT, "DEDENT", line});
-    }
-    if (!currentLineTokens.empty()) tokensByLine.push_back(currentLineTokens);
     
     // EOF token
     tokensByLine.push_back({{TokenType::END_OF_FILE, "EOF", line}});

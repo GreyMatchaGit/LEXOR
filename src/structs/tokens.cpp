@@ -76,8 +76,6 @@ std::string tokenTypeToString(TokenType type) {
         case TokenType::COMMA: return "COMMA";
         case TokenType::LPAREN: return "LPAREN";
         case TokenType::RPAREN: return "RPAREN";
-        case TokenType::INDENT: return "INDENT";
-        case TokenType::DEDENT: return "DEDENT";
         case TokenType::END_OF_FILE: return "EOF";
         case TokenType::ERROR: return "ERROR";
         default: return "UNKNOWN";
