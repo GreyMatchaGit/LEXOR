@@ -70,26 +70,59 @@ std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& to
     auto program = std::make_unique<Program>();
 
     if (!replMode) {
-        // First line must be SCRIPT AREA
-        if (isAtEnd() || !check(TokenType::SCRIPT) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::AREA) {
-            int lineNum = isAtEnd() ? 1 : lines[currentLine][0].line;
-            throw std::runtime_error("Line " + std::to_string(lineNum) + " Parser Error: Missing SCRIPT AREA at the beginning");
+        // SCRIPT AREA
+        if (isAtEnd() ||
+            lines[currentLine].size() != 2 ||
+            lines[currentLine][0].type != TokenType::SCRIPT ||
+            lines[currentLine][1].type != TokenType::AREA)
+        {
+            throw std::runtime_error(
+                "Line 1 Parser Error: 'SCRIPT AREA' must appear alone on this line"
+            );
         }
         advanceLine();
 
-        if (isAtEnd()) throw std::runtime_error("Missing START SCRIPT");
-
-        if (isAtEnd() || !check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::SCRIPT) {
-            int lineNum = isAtEnd() ? 2 : lines[currentLine][0].line;
-            throw std::runtime_error("Line " + std::to_string(lineNum) + " Parser Error: Expected START SCRIPT immediately after SCRIPT AREA");
+        // START SCRIPT
+        if (isAtEnd() ||
+            lines[currentLine].size() != 2 ||
+            lines[currentLine][0].type != TokenType::START ||
+            lines[currentLine][1].type != TokenType::SCRIPT)
+        {
+            throw std::runtime_error(
+                "Line 2 Parser Error: 'START SCRIPT' must appear alone on this line"
+            );
         }
         advanceLine();
     }
 
+    // Code body and END SCRIPT
     while (!isAtEnd()) {
+
+        // END SCRIPT 
         if (check(TokenType::END_OF_FILE)) break;
-        if (check(TokenType::END) && currentToken + 1 < lines[currentLine].size() && lines[currentLine][currentToken + 1].type == TokenType::SCRIPT) {
-            break; // Valid exit
+        if (lines[currentLine].size() >= 2 &&
+            lines[currentLine][0].type == TokenType::END &&
+            lines[currentLine][1].type == TokenType::SCRIPT)
+        {   
+
+            if(lines[currentLine].size() != 2) {
+                throw std::runtime_error(
+                    "Line " + std::to_string(peek().line) + 
+                    " Parser Error: No code allowed after 'END SCRIPT'"
+                );
+            }
+
+            advanceLine();
+
+            if(!(lines[currentLine].size() == 1 && 
+                lines[currentLine][0].type == TokenType::END_OF_FILE)) {
+                throw std::runtime_error(
+                    "Line " + std::to_string(peek().line) + 
+                    " Parser Error: No code allowed after 'END SCRIPT'"
+                );
+            }
+
+            break;
         }
 
         program->statements.push_back(declaration());
