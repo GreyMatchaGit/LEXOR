@@ -53,6 +53,18 @@ void Parser::advanceLine() {
     currentToken = 0;
 }
 
+// Helper Function for Keyword Line Matching (e.g. SCRIPT AREA, START SCRIPT, END SCRIPT)
+bool isKeyLineMatch(const std::vector<Token>& line, std::initializer_list<TokenType> expected) {
+    if (line.size() < expected.size()) return false;
+    
+    size_t i = 0;
+    for (TokenType type : expected) {
+        if (line[i++].type != type) return false;
+    }
+    
+    return true;
+}
+
 std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& tokens) {
     // Catch any lexer errors before parsing
     for (const auto& lineTokens : tokens) {
@@ -73,8 +85,7 @@ std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& to
         // SCRIPT AREA
         if (isAtEnd() ||
             lines[currentLine].size() != 2 ||
-            lines[currentLine][0].type != TokenType::SCRIPT ||
-            lines[currentLine][1].type != TokenType::AREA)
+            !isKeyLineMatch(lines[currentLine], {TokenType::SCRIPT, TokenType::AREA}))
         {
             throw std::runtime_error(
                 "Line 1 Parser Error: 'SCRIPT AREA' must appear alone on this line"
@@ -85,8 +96,7 @@ std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& to
         // START SCRIPT
         if (isAtEnd() ||
             lines[currentLine].size() != 2 ||
-            lines[currentLine][0].type != TokenType::START ||
-            lines[currentLine][1].type != TokenType::SCRIPT)
+            !isKeyLineMatch(lines[currentLine], {TokenType::START, TokenType::SCRIPT}))
         {
             throw std::runtime_error(
                 "Line 2 Parser Error: 'START SCRIPT' must appear alone on this line"
@@ -95,14 +105,15 @@ std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& to
         advanceLine();
     }
 
+    bool inExecutableCode = false;
+
     // Code body and END SCRIPT
     while (!isAtEnd()) {
 
         // END SCRIPT 
         if (check(TokenType::END_OF_FILE)) break;
         if (lines[currentLine].size() >= 2 &&
-            lines[currentLine][0].type == TokenType::END &&
-            lines[currentLine][1].type == TokenType::SCRIPT)
+            isKeyLineMatch(lines[currentLine], {TokenType::END, TokenType::SCRIPT}))
         {   
 
             if(lines[currentLine].size() != 2) {
@@ -111,7 +122,7 @@ std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& to
                     " Parser Error: No code allowed after 'END SCRIPT'"
                 );
             }
-
+            
             advanceLine();
 
             if(!(lines[currentLine].size() == 1 && 
@@ -123,6 +134,28 @@ std::unique_ptr<Program> Parser::parse(const std::vector<std::vector<Token>>& to
             }
 
             break;
+        }
+
+        // Ensure Variable Declarations appear before executable code
+        if (check(TokenType::DECLARE)) {
+            if (inExecutableCode) {
+                throw std::runtime_error(
+                    "Line " + std::to_string(peek().line) + 
+                    " Parser Error: Variable declarations must appear before executable code."
+                );
+            }
+        } else {
+            inExecutableCode = true;
+        }
+
+        // Ensure Keyword does not appear in the code body
+        if(isKeyLineMatch(lines[currentLine], {TokenType::SCRIPT, TokenType::AREA}) ||
+           isKeyLineMatch(lines[currentLine], {TokenType::START, TokenType::SCRIPT}))
+        {
+            throw std::runtime_error(
+                "Line " + std::to_string(peek().line) + 
+                " Parser Error: 'SCRIPT AREA' and 'START SCRIPT' are not allowed in the code body."
+            );
         }
 
         program->statements.push_back(declaration());
@@ -333,6 +366,13 @@ std::vector<std::unique_ptr<Statement>> Parser::block() {
         if (check(TokenType::END)) {
             // Found END block
             break;
+        }
+
+        if (check(TokenType::DECLARE)) {
+            throw std::runtime_error(
+                "Line " + std::to_string(peek().line) + 
+                " Parser Error: Variable declarations are not allowed inside blocks. They must appear before executable code."
+            );
         }
 
         statements.push_back(declaration());
