@@ -253,9 +253,11 @@ std::unique_ptr<Statement> Parser::printStmt() {
 
 std::unique_ptr<Statement> Parser::scanStmt() {
     auto stmt = std::make_unique<ScanStatement>();
-    do {
+    stmt->targets.push_back(consume(TokenType::IDENTIFIER, "Expected variable name.").value);
+    while (!isLineAtEnd()) {
+        consume(TokenType::COMMA, "Expected ',' between variables in SCAN statement.");
         stmt->targets.push_back(consume(TokenType::IDENTIFIER, "Expected variable name.").value);
-    } while (match(TokenType::COMMA));
+    }
     return stmt;
 }
 

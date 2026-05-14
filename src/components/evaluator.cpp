@@ -57,12 +57,10 @@ void Evaluator::visit(VarDeclStatement* node) {
             else if (val.type == DataType::FLOAT && initVal.type == DataType::FLOAT) val.value = initVal.value;
             else if (val.type == DataType::CHAR && initVal.type == DataType::CHAR) val.value = initVal.value;
             else if (val.type == DataType::BOOL && initVal.type == DataType::BOOL) val.value = initVal.value;
-            else if (val.type == DataType::FLOAT && initVal.type == DataType::INT) val.value = (float)std::get<int>(initVal.value);
-            else if (val.type == DataType::INT && initVal.type == DataType::FLOAT) val.value = (int)std::get<float>(initVal.value);
             else if (val.type == DataType::BOOL && initVal.type == DataType::STRING) {
                 if (std::get<std::string>(initVal.value) == "TRUE") val.value = true;
                 else if (std::get<std::string>(initVal.value) == "FALSE") val.value = false;
-                else throw std::runtime_error("Invalid BOOL value.");
+                else throw std::runtime_error("Invalid BOOL value. Expected \"TRUE\" or \"FALSE\".");
             }
             else throw std::runtime_error("Type mismatch on initialization.");
         }
@@ -76,20 +74,11 @@ void Evaluator::visit(AssignStatement* node) {
     for (const auto& target : node->targets) {
         RuntimeValue targetVar = env->getVariable(target);
         
-        if (targetVar.type == DataType::INT && val.type == DataType::FLOAT) {
-            targetVar.value = (int)std::get<float>(val.value);
-            env->assignVariable(target, targetVar);
-            continue;
-        }
-        if (targetVar.type == DataType::FLOAT && val.type == DataType::INT) {
-            targetVar.value = (float)std::get<int>(val.value);
-            env->assignVariable(target, targetVar);
-            continue;
-        }
+
         if (targetVar.type == DataType::BOOL && val.type == DataType::STRING) {
              if (std::get<std::string>(val.value) == "TRUE") targetVar.value = true;
              else if (std::get<std::string>(val.value) == "FALSE") targetVar.value = false;
-             else throw std::runtime_error("Invalid BOOL string");
+             else throw std::runtime_error("Invalid BOOL string. Expected \"TRUE\" or \"FALSE\".");
              env->assignVariable(target, targetVar);
              continue;
         }
@@ -123,18 +112,47 @@ void Evaluator::visit(PrintStatement* node) {
 }
 
 void Evaluator::visit(ScanStatement* node) {
-    for (const auto& target : node->targets) {
+    for (size_t i = 0; i < node->targets.size(); ++i) {
+        if (i > 0) {
+            char comma;
+            std::cin >> comma;
+            if (comma != ',') {
+                throw std::runtime_error("Expected ',' between input values for SCAN.");
+            }
+        }
+        const auto& target = node->targets[i];
         RuntimeValue v = env->getVariable(target);
+        std::string s;
+        std::cin >> s;
+
         if (v.type == DataType::INT) {
-            int x; std::cin >> x; v.value = x;
+            if (s.find('.') != std::string::npos) {
+                throw std::runtime_error("Type mismatch: Expected INT, got FLOAT input for '" + target + "'.");
+            }
+            try {
+                size_t pos;
+                int x = std::stoi(s, &pos);
+                if (pos != s.length()) throw std::runtime_error("Invalid INT input for '" + target + "'.");
+                v.value = x;
+            } catch (...) {
+                throw std::runtime_error("Invalid INT input for '" + target + "'.");
+            }
         } else if (v.type == DataType::FLOAT) {
-            float x; std::cin >> x; v.value = x;
+            try {
+                size_t pos;
+                float x = std::stof(s, &pos);
+                if (pos != s.length()) throw std::runtime_error("Invalid FLOAT input for '" + target + "'.");
+                v.value = x;
+            } catch (...) {
+                throw std::runtime_error("Invalid FLOAT input for '" + target + "'.");
+            }
         } else if (v.type == DataType::CHAR) {
-            char x; std::cin >> x; v.value = x;
+            if (s.length() != 1) throw std::runtime_error("Invalid CHAR input for '" + target + "'.");
+            v.value = s[0];
         } else if (v.type == DataType::BOOL) {
-            std::string x; std::cin >> x;
-            if (x == "TRUE") v.value = true;
-            else if (x == "FALSE") v.value = false;
+            if (s == "TRUE") v.value = true;
+            else if (s == "FALSE") v.value = false;
+            else throw std::runtime_error("Invalid BOOL input for '" + target + "'. Expected TRUE or FALSE.");
         }
         env->assignVariable(target, v);
     }
